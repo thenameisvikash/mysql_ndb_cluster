@@ -1,6 +1,6 @@
 # MySQL Cluster with ProxySQL
 
-A production-ready MySQL Cluster (NDB) setup with ProxySQL for high availability, load balancing, and read/write splitting. This project provides a complete solution for deploying a scalable and fault-tolerant MySQL database cluster using Docker Compose.
+A local setup of production-ready MySQL Cluster (NDB) setup with ProxySQL for high availability, load balancing, and read/write splitting. This project provides a complete solution for deploying a scalable and fault-tolerant MySQL database cluster using Docker Compose.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
