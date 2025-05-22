@@ -1,0 +1,74 @@
+# Simple ProxySQL Configuration for MySQL NDB Cluster
+# This configuration is designed to be minimal but effective
+
+datadir="/var/lib/proxysql"
+
+# Admin Interface
+admin_variables=
+{
+    admin_credentials="admin:admin"
+    mysql_ifaces="0.0.0.0:6032"
+}
+
+# MySQL Interface
+mysql_variables=
+{
+    interfaces="0.0.0.0:6033"
+    server_version="8.0.32"
+    threads=4
+    max_connections=1000
+    default_query_timeout=36000000
+    monitor_username="root"
+    monitor_password="rootpassword"
+    monitor_enabled=true
+}
+
+# Server Configuration - All servers in hostgroup 0
+mysql_servers =
+(
+    {
+        address="mysql1"
+        port=3306
+        hostgroup=0
+        status="ONLINE"
+        weight=1
+        max_connections=200
+    },
+    {
+        address="mysql2"
+        port=3306
+        hostgroup=0
+        status="ONLINE"
+        weight=1
+        max_connections=200
+    }
+)
+
+# User Configuration - All users use hostgroup 0
+mysql_users =
+(
+    {
+        username="root"
+        password="rootpassword"
+        default_hostgroup=0
+        active=1
+    },
+    {
+        username="testuser"
+        password="testpassword"
+        default_hostgroup=0
+        active=1
+    },
+    {
+        username="readonly"
+        password="readonlypass"
+        default_hostgroup=0
+        active=1
+    },
+    {
+        username="readwrite"
+        password="readwritepass"
+        default_hostgroup=0
+        active=1
+    }
+)

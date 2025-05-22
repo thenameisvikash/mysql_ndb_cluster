@@ -1,0 +1,491 @@
+# Enhanced ProxySQL Configuration for MySQL NDB Cluster
+# Production-ready configuration for dual ProxySQL instances
+
+#---------------------------------------
+# PROXYSQL INSTANCE 2 CONFIGURATION
+#---------------------------------------
+# File: /etc/proxysql.cnf for proxysql2 container
+
+# ProxySQL Data Directory
+datadir="/var/lib/proxysql"
+
+#---------------------------------------
+# ADMIN INTERFACE CONFIGURATION
+#---------------------------------------
+admin_variables=
+{
+    # Admin credentials - SECURITY: Change these in production!
+    admin_credentials="admin:admin;radmin:radmin"
+    
+    # Admin interfaces - SECURITY: Restrict to private networks in production
+    mysql_ifaces="0.0.0.0:6032"
+    admin_ifaces="0.0.0.0:6032"
+    
+    # Admin web interface - disabled for security
+    web_enabled=false
+    refresh_interval=2000
+    
+    # ProxySQL Clustering Configuration
+    cluster_username="proxysql_cluster"
+    cluster_password="ClusterPassword$123!"  # SECURITY: Use a strong password
+    cluster_check_interval_ms=1000
+    cluster_check_status_frequency=10
+    cluster_mysql_query_rules_save_to_disk=true
+    cluster_mysql_servers_save_to_disk=true
+    cluster_mysql_users_save_to_disk=true
+    cluster_proxysql_servers_save_to_disk=true
+    cluster_mysql_query_rules_diffs_before_sync=1
+    cluster_mysql_servers_diffs_before_sync=1
+    cluster_mysql_users_diffs_before_sync=1
+    cluster_proxysql_servers_diffs_before_sync=1
+}
+
+#---------------------------------------
+# MYSQL INTERFACE CONFIGURATION
+#---------------------------------------
+mysql_variables=
+{
+    # Client-facing MySQL interface - SECURITY: Restrict in production
+    interfaces="0.0.0.0:6033"
+    
+    # Server version - match your NDB Cluster version
+    server_version="8.0.32"
+    
+    # Connection pool settings
+    threads=16                       # PERFORMANCE: Increased for better concurrency
+    max_connections=8192             # PERFORMANCE: Increased for high traffic
+    default_query_timeout=3600000    # 1 hour max query time
+    default_connect_timeout=3000     # 3 second connection timeout
+    connect_timeout_server=3000      # Backend connection timeout
+    ping_timeout_server=500          # Backend ping timeout
+    
+    # NDB Cluster monitoring settings
+    monitor_enabled=true
+    monitor_username="proxysql_monitor"
+    monitor_password="StrongMonitor$123!"  # SECURITY: Use a strong password
+    monitor_connect_interval=1000          # Check connection every 1 second
+    monitor_ping_interval=500              # Ping every 500ms
+    monitor_read_only_timeout=1500         # Read-only status check timeout
+    monitor_ping_interval_server_msec=500  # Server-specific ping interval
+    monitor_ping_timeout_server=200        # Server ping timeout
+    monitor_history=60000                  # Keep 1 minute of monitoring history
+    
+    # Performance settings
+    free_connections_pct=10          # Keep 10% connections free in pool
+    connection_max_age_ms=0          # Disable connection aging
+    max_transaction_time=14400000    # 4 hour max transaction time
+    query_processor_iterations=0     # Process until completion
+    query_processor_regex=1          # Use regex for query matching
+    
+    # Failover settings
+    connect_retries_on_failure=5     # Retry 5 times on connection failure
+    connection_delay_multiplex_ms=0  # No delay for multiplexing
+    forward_autocommit=true          # Forward autocommit to backend
+    
+    # Compression and protocol
+    have_compress=true               # Enable compression
+    client_found_rows=true           # Match MySQL behavior
+    commands_stats=true              # Track command statistics
+    multiplexing=true                # Enable connection multiplexing
+    
+    # Query cache settings - PERFORMANCE: Disabled as not always beneficial for NDB
+    query_cache_size_MB=0            # Disable query cache
+    
+    # Connection warming - PERFORMANCE: Good for steady workloads
+    auto_increment_delay_multiplex=5 # Delay between auto-increment values
+    poll_timeout=2000                # Poll timeout in ms
+    long_query_time=10000            # Log queries longer than 10 seconds
+    
+    # Memory management
+    stack_size=1048576               # 1MB stack size per thread
+}
+
+#---------------------------------------
+# MYSQL SERVER NODES CONFIGURATION
+#---------------------------------------
+mysql_servers=
+(
+    # Write hostgroup (0) - Primary SQL nodes
+    {
+        address="mysql1"
+        port=3306
+        hostgroup=0
+        status="ONLINE"
+        weight=1000                # Primary for writes
+        compression=0              # No compression to backend
+        max_connections=2000       # Maximum connections to this backend
+        max_replication_lag=0      # Not applicable for NDB but good to specify
+        use_ssl=0                  # SECURITY: Enable in production!
+        max_latency_ms=0           # No latency limit
+        comment="NDB SQL Node 1 - Primary Write"
+    },
+    {
+        address="mysql2"
+        port=3306
+        hostgroup=0
+        status="ONLINE"
+        weight=500                 # Secondary for writes
+        compression=0              # No compression to backend
+        max_connections=2000       # Maximum connections to this backend
+        max_replication_lag=0      # Not applicable for NDB but good to specify
+        use_ssl=0                  # SECURITY: Enable in production!
+        max_latency_ms=0           # No latency limit
+        comment="NDB SQL Node 2 - Secondary Write"
+    },
+    
+    # Read hostgroup (10) - Balanced SQL nodes for reads
+    {
+        address="mysql1"
+        port=3306
+        hostgroup=10
+        status="ONLINE"
+        weight=500                 # Secondary for reads
+        compression=0              # No compression to backend
+        max_connections=2000       # Maximum connections to this backend
+        max_replication_lag=0      # Not applicable for NDB but good to specify
+        use_ssl=0                  # SECURITY: Enable in production!
+        max_latency_ms=0           # No latency limit
+        comment="NDB SQL Node 1 - Secondary Read"
+    },
+    {
+        address="mysql2"
+        port=3306
+        hostgroup=10
+        status="ONLINE"
+        weight=1000                # Primary for reads
+        compression=0              # No compression to backend
+        max_connections=2000       # Maximum connections to this backend
+        max_replication_lag=0      # Not applicable for NDB but good to specify
+        use_ssl=0                  # SECURITY: Enable in production!
+        max_latency_ms=0           # No latency limit
+        comment="NDB SQL Node 2 - Primary Read"
+    }
+)
+
+#---------------------------------------
+# MYSQL USER CONFIGURATION
+#---------------------------------------
+mysql_users=
+(
+    # Regular application user with transaction persistence
+    {
+        username="testuser"
+        password="testpassword"     # SECURITY: Use a strong password
+        default_hostgroup=0
+        active=1
+        max_connections=1000
+        default_schema="test_db"
+        transaction_persistent=1
+        fast_forward=0
+        backend=1
+        frontend=1
+        max_lag_ms=0               # Not applicable for NDB
+        use_ssl=0                  # SECURITY: Enable in production!
+        attributes=""
+        comment="Regular application user"
+    },
+    
+    # Read-only user
+    {
+        username="readonly"
+        password="readonlypass"     # SECURITY: Use a strong password
+        default_hostgroup=10
+        active=1
+        max_connections=1000
+        default_schema="test_db"
+        transaction_persistent=0
+        fast_forward=0
+        backend=1
+        frontend=1
+        max_lag_ms=0               # Not applicable for NDB
+        use_ssl=0                  # SECURITY: Enable in production!
+        attributes=""
+        comment="Read-only user, directed to read hostgroup"
+    },
+    
+    # Read-write user
+    {
+        username="readwrite"
+        password="readwritepass"    # SECURITY: Use a strong password
+        default_hostgroup=0
+        active=1
+        max_connections=1000
+        default_schema="test_db"
+        transaction_persistent=1
+        fast_forward=0
+        backend=1
+        frontend=1
+        max_lag_ms=0               # Not applicable for NDB
+        use_ssl=0                  # SECURITY: Enable in production!
+        attributes=""
+        comment="Read-write user, directed to write hostgroup"
+    },
+    
+    # Admin user
+    {
+        username="admin"
+        password="adminpass"        # SECURITY: Use a strong password
+        default_hostgroup=0
+        active=1
+        max_connections=100
+        default_schema="test_db"
+        transaction_persistent=1
+        fast_forward=0
+        backend=1
+        frontend=1
+        max_lag_ms=0               # Not applicable for NDB
+        use_ssl=0                  # SECURITY: Enable in production!
+        attributes=""
+        comment="Admin user with higher privileges"
+    },
+    
+    # Monitoring user
+    {
+        username="proxysql_monitor"
+        password="StrongMonitor$123!"  # SECURITY: Use a strong password
+        default_hostgroup=0
+        active=1
+        max_connections=100
+        default_schema="information_schema"
+        transaction_persistent=0
+        fast_forward=0
+        backend=1
+        frontend=0                 # Not accessible from outside
+        max_lag_ms=0               # Not applicable for NDB
+        use_ssl=0                  # SECURITY: Enable in production!
+        attributes=""
+        comment="ProxySQL monitoring user"
+    }
+)
+
+#---------------------------------------
+# QUERY ROUTING RULES
+#---------------------------------------
+mysql_query_rules=
+(
+    # Transaction Control Rules
+    {
+        rule_id=1
+        active=1
+        match_pattern="^START TRANSACTION|^BEGIN"
+        destination_hostgroup=0
+        apply=1
+        comment="Send transaction starts to the writer hostgroup"
+    },
+    {
+        rule_id=2
+        active=1
+        match_pattern="^COMMIT|^ROLLBACK"
+        destination_hostgroup=0
+        apply=1
+        comment="Send transaction commits/rollbacks to the writer hostgroup"
+    },
+    
+    # Write Operation Rules
+    {
+        rule_id=10
+        active=1
+        match_pattern="^INSERT"
+        destination_hostgroup=0
+        apply=1
+        comment="Send INSERTs to the writer hostgroup"
+    },
+    {
+        rule_id=11
+        active=1
+        match_pattern="^UPDATE"
+        destination_hostgroup=0
+        apply=1
+        comment="Send UPDATEs to the writer hostgroup"
+    },
+    {
+        rule_id=12
+        active=1
+        match_pattern="^DELETE"
+        destination_hostgroup=0
+        apply=1
+        comment="Send DELETEs to the writer hostgroup"
+    },
+    {
+        rule_id=13
+        active=1
+        match_pattern="^REPLACE"
+        destination_hostgroup=0
+        apply=1
+        comment="Send REPLACEs to the writer hostgroup"
+    },
+    
+    # DDL Operation Rules
+    {
+        rule_id=20
+        active=1
+        match_pattern="^CREATE"
+        destination_hostgroup=0
+        apply=1
+        comment="Send CREATE statements to the writer hostgroup"
+    },
+    {
+        rule_id=21
+        active=1
+        match_pattern="^ALTER"
+        destination_hostgroup=0
+        apply=1
+        comment="Send ALTER statements to the writer hostgroup"
+    },
+    {
+        rule_id=22
+        active=1
+        match_pattern="^DROP"
+        destination_hostgroup=0
+        apply=1
+        comment="Send DROP statements to the writer hostgroup"
+    },
+    {
+        rule_id=23
+        active=1
+        match_pattern="^TRUNCATE"
+        destination_hostgroup=0
+        apply=1
+        comment="Send TRUNCATE statements to the writer hostgroup"
+    },
+    
+    # Read Operation Rules
+    {
+        rule_id=100
+        active=1
+        match_pattern="^SELECT"
+        destination_hostgroup=10
+        apply=1
+        comment="Send SELECTs to the reader hostgroup"
+    },
+    {
+        rule_id=101
+        active=1
+        match_pattern="^SHOW"
+        destination_hostgroup=10
+        apply=1
+        comment="Send SHOW statements to the reader hostgroup"
+    },
+    {
+        rule_id=102
+        active=1
+        match_pattern="^(DESCRIBE|EXPLAIN)"
+        destination_hostgroup=10
+        apply=1
+        comment="Send DESCRIBE/EXPLAIN statements to the reader hostgroup"
+    },
+    
+    # NDB Cluster Specific Rules
+    {
+        rule_id=200
+        active=1
+        match_pattern="^SELECT.*ndb_.*"
+        destination_hostgroup=0
+        apply=1
+        comment="Send NDB system table queries to writer hostgroup"
+    },
+    {
+        rule_id=201
+        active=1
+        match_pattern="SHOW ENGINE NDB STATUS"
+        destination_hostgroup=0
+        apply=1
+        comment="Send NDB status checks to writer hostgroup"
+    },
+    {
+        rule_id=202
+        active=1
+        match_pattern="^SELECT.*FOR UPDATE|^SELECT.*FOR SHARE"
+        destination_hostgroup=0
+        apply=1
+        comment="Send locking SELECTs to writer hostgroup"
+    },
+    
+    # User-specific Routing
+    {
+        rule_id=300
+        active=1
+        username="readonly"
+        destination_hostgroup=10
+        apply=1
+        comment="Force readonly user to reader hostgroup"
+    },
+    {
+        rule_id=301
+        active=1
+        username="readwrite"
+        destination_hostgroup=0
+        apply=1
+        comment="Force readwrite user to writer hostgroup"
+    },
+    
+    # Default Fallback Rule
+    {
+        rule_id=1000
+        active=1
+        match_pattern=".*"
+        destination_hostgroup=0
+        apply=1
+        comment="Default rule - send to writer hostgroup"
+    }
+)
+
+#---------------------------------------
+# MYSQL REPLICATION HOSTGROUPS
+#---------------------------------------
+mysql_replication_hostgroups=
+(
+    {
+        writer_hostgroup=0
+        reader_hostgroup=10
+        comment="NDB Cluster read/write split hostgroups"
+    }
+)
+
+#---------------------------------------
+# PROXYSQL CLUSTERING
+#---------------------------------------
+proxysql_servers=
+(
+    {
+        hostname="proxysql"
+        port=6032
+        weight=100
+        comment="ProxySQL Instance 1"
+    }
+)
+
+#---------------------------------------
+# SCHEDULER CONFIGURATION
+#---------------------------------------
+scheduler=
+(
+    {
+        id=1
+        active=0
+        interval_ms=5000
+        filename="/usr/bin/proxysql_ndb_check.sh"
+        arg1="--cluster-check"
+        arg2="--verbose=1"
+        arg3="--log-to-disk=1"
+        comment="NDB Cluster health check script - disabled until script exists"
+    },
+    {
+        id=2
+        active=0
+        interval_ms=60000
+        filename="/usr/bin/proxysql_galera_checker"
+        arg1="--write-hg=0"
+        arg2="--read-hg=10"
+        arg3="--max-failures=3"
+        arg4="--log=/var/lib/proxysql/proxysql_galera_checker.log"
+        arg5="--active-failover=1"
+        comment="ProxySQL MySQL checker script - disabled until script exists"
+    }
+)
+
+#---------------------------------------
+# PROMETHEUS MONITORING (Recommended for production)
+#---------------------------------------
+# prometheus_exporter_opts="--web.listen-address=:6070"
+# Comment out the above line if you're not using Prometheus monitoring

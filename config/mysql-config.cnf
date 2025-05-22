@@ -1,0 +1,49 @@
+[mysqld]
+# NDB cluster configuration
+ndbcluster
+ndb-connectstring=ndb_mgmd:1186
+default_storage_engine=ndbcluster
+default-time-zone='+00:00'
+
+# NDB performance settings
+ndb_autoincrement_prefetch_sz=512     # Prefetch more auto_increment values
+ndb_force_send=1                      # Don't buffer sends
+ndb_use_exact_count=0                 # Avoid COUNT(*) being slow
+ndb_use_transactions=1                # Use transactions
+ndb_table_no_logging=1                # Skip logging for better performance
+ndb_batch_size=32768                  # Batch size for operations
+ndb_optimized_node_selection=1        # Smart node selection
+
+# Connection and thread settings
+max_connections=5000                  # High number for many concurrent clients
+thread_cache_size=256                 # Cache threads for reuse
+thread_stack=256K                     # Thread stack size
+max_prepared_stmt_count=1048576       # For prepared statements
+table_open_cache=8192                 # Cache for open tables
+table_definition_cache=4096           # Cache for table definitions
+
+# Query cache (disabled for high write workloads)
+query_cache_type=0
+query_cache_size=0
+
+# Memory settings
+max_heap_table_size=2G                # For in-memory temp tables
+tmp_table_size=2G                     # Size of in-memory temp tables
+join_buffer_size=4M                   # Join buffer size
+sort_buffer_size=4M                   # Sort buffer size
+read_buffer_size=2M                   # Read buffer size
+read_rnd_buffer_size=2M               # Random read buffer size
+
+# InnoDB settings (for non-NDB tables)
+innodb_buffer_pool_size=4G
+innodb_log_file_size=1G
+innodb_flush_log_at_trx_commit=2      # Better performance, slight durability trade-off
+innodb_flush_method=O_DIRECT          # Bypass OS cache
+
+# Binary logging
+binlog_format=ROW                     # Required for NDB Cluster
+sync_binlog=0                         # Don't sync binlog (performance over durability)
+expire_logs_days=7                    # Purge binary logs after 7 days
+
+[mysql_cluster]
+ndb-connectstring=ndb_mgmd:1186

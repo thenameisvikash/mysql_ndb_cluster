@@ -1,0 +1,20 @@
+datadir="/var/lib/proxysql"
+
+admin_variables=
+{
+  admin_credentials="admin:admin"
+  mysql_ifaces="0.0.0.0:6032"
+}
+
+mysql_servers =
+(
+  { address = "mysql1", port = 3306, hostgroup = 0 },
+  { address = "mysql2", port = 3306, hostgroup = 0 }
+)
+
+mysql_users =
+(
+  { username = "root", password = "rootpassword", default_hostgroup = 0, active = 1 }
+)
+
+mysql_query_rules = ( )

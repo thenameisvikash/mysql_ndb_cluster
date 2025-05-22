@@ -1,0 +1,250 @@
+services:
+  # Management Nodes for High Availability
+  management1:
+    image: mysql/mysql-cluster:8.0
+    container_name: management1
+    hostname: management1
+    entrypoint: [""]
+    volumes:
+      - ./config/management1-config/management-config.ini:/etc/mysql-cluster/config.ini:ro
+      - ./management1-data:/var/lib/mysql-cluster
+    command: >
+      sh -c "
+      rm -f /var/lib/mysql-cluster/ndb_1_config.bin.*;
+      ndb_mgmd --initial --config-file=/etc/mysql-cluster/config.ini --ndb-nodeid=1 --bind-address=0.0.0.0 --nodaemon"
+    ports:
+      - "1186:1186"
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.2
+    restart: unless-stopped
+    mem_limit: 1g
+    
+  management2:
+    image: mysql/mysql-cluster:8.0
+    container_name: management2
+    hostname: management2
+    entrypoint: [""]
+    volumes:
+      - ./config/management2-config/management-config.ini:/etc/mysql-cluster/config.ini:ro
+      - ./management2-data:/var/lib/mysql-cluster
+    command: >
+      sh -c "
+      rm -f /var/lib/mysql-cluster/ndb_8_config.bin.*;
+      ndb_mgmd --initial --config-file=/etc/mysql-cluster/config.ini --ndb-nodeid=8 --bind-address=0.0.0.0 --nodaemon"
+    ports:
+      - "1187:1186"
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.11
+    depends_on:
+      management1:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 1g
+
+  # Data Nodes
+  ndb1:
+    image: mysql/mysql-cluster:8.0
+    container_name: ndb1
+    hostname: ndb1
+    entrypoint: [""]
+    volumes:
+      - ./ndb1-data:/var/lib/mysql-cluster
+    command: >
+      sh -c "ndbd --ndb-nodeid=2 --ndb-connectstring=management1:1186,management2:1186 --nodaemon"
+    depends_on:
+      management1:
+        condition: service_started
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.3
+    restart: unless-stopped
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  ndb2:
+    image: mysql/mysql-cluster:8.0
+    container_name: ndb2
+    hostname: ndb2
+    entrypoint: [""]
+    volumes:
+      - ./ndb2-data:/var/lib/mysql-cluster
+    command: >
+      sh -c "ndbd --ndb-nodeid=3 --ndb-connectstring=management1:1186,management2:1186 --nodaemon"
+    depends_on:
+      management1:
+        condition: service_started
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.4
+    restart: unless-stopped
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+        
+  # Additional Data Nodes for Node Group 1
+  ndb3:
+    image: mysql/mysql-cluster:8.0
+    container_name: ndb3
+    hostname: ndb3
+    entrypoint: [""]
+    volumes:
+      - ./ndb3-data:/var/lib/mysql-cluster
+    command: >
+      sh -c "ndbd --ndb-nodeid=6 --ndb-connectstring=management1:1186,management2:1186 --nodaemon"
+    depends_on:
+      management1:
+        condition: service_started
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.7
+    restart: unless-stopped
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+        
+  ndb4:
+    image: mysql/mysql-cluster:8.0
+    container_name: ndb4
+    hostname: ndb4
+    entrypoint: [""]
+    volumes:
+      - ./ndb4-data:/var/lib/mysql-cluster
+    command: >
+      sh -c "ndbd --ndb-nodeid=7 --ndb-connectstring=management1:1186,management2:1186 --nodaemon"
+    depends_on:
+      management1:
+        condition: service_started
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.8
+    restart: unless-stopped
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # MySQL SQL Nodes
+  
+  mysql1:
+    image: mysql/mysql-cluster:8.0
+    container_name: mysql1
+    hostname: mysql1
+    volumes:
+      - ./config/mysql1/my.cnf:/etc/my.cnf
+      - ./data/mysql1:/var/lib/mysql
+      - ./logs/mysql1:/var/log/mysql
+      - ./scripts/mysql1/mysql-init.sh:/docker-entrypoint-initdb.d/mysql-init.sh
+      - ./scripts/mysql1/init-mysql-users.sql:/docker-entrypoint-initdb.d/init-mysql-users.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "3306:3306"
+    command: --ndbcluster --ndb-connectstring=management1:1186,management2:1186 --bind-address=0.0.0.0
+    depends_on:
+      ndb1:
+        condition: service_started
+      ndb2:
+        condition: service_started
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.5
+    restart: unless-stopped
+
+  mysql2:
+    image: mysql/mysql-cluster:8.0
+    container_name: mysql2
+    hostname: mysql2
+    volumes:
+      - ./config/mysql2/my.cnf:/etc/my.cnf
+      - ./data/mysql2:/var/lib/mysql
+      - ./logs/mysql2:/var/log/mysql
+      - ./scripts/mysql2/mysql-init.sh:/docker-entrypoint-initdb.d/mysql-init.sh
+      - ./scripts/mysql2/init-mysql-users.sql:/docker-entrypoint-initdb.d/init-mysql-users.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "3307:3306"
+    command: --ndbcluster --ndb-connectstring=management1:1186,management2:1186 --bind-address=0.0.0.0
+    depends_on:
+      ndb1:
+        condition: service_started
+      ndb2:
+        condition: service_started
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.6
+    restart: unless-stopped
+
+  # ProxySQL Load Balancer with setup script
+  proxysql:
+    image: proxysql/proxysql:2.4.4
+    hostname: proxysql
+    container_name: proxysql
+    environment:
+     - PROXYSQL_ADMIN_USER=admin
+     - PROXYSQL_ADMIN_PASSWORD=admin
+     - PROXYSQL_ADMIN_HOSTS=%
+     - MYSQL_ROOT_PASSWORD=rootpassword
+    volumes:
+      - ./config/proxysql1-config/proxysql-fixed-complete.cnf:/etc/proxysql.cnf
+      - ./scripts/proxysql1-init/proxysql-init-fixed.sh:/docker-entrypoint-initdb.d/proxysql-initdb.sh
+    ports:
+      - "6033:6033"  # MySQL protocol
+      - "6032:6032"  # Admin interface
+    depends_on:
+      mysql1:
+        condition: service_healthy
+      mysql2:
+        condition: service_healthy
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.9
+    restart: unless-stopped
+
+  # High-Availability: Second ProxySQL instance
+  proxysql2:
+    image: proxysql/proxysql:2.4.4
+    hostname: proxysql2
+    container_name: proxysql2
+    environment:
+     - PROXYSQL_ADMIN_USER=admin
+     - PROXYSQL_ADMIN_PASSWORD=admin
+     - PROXYSQL_ADMIN_HOSTS=%
+     - MYSQL_ROOT_PASSWORD=rootpassword
+    volumes:
+      - ./config/proxysql2-config/proxysql-fixed-complete.cnf:/etc/proxysql.cnf
+      - ./scripts/proxysql2-init/proxysql-init-fixed.sh:/docker-entrypoint-initdb.d/proxysql-initdb.sh
+    ports:
+      - "6034:6033"  # MySQL protocol for proxysql2
+      - "6035:6032"  # Admin interface for proxysql2
+    depends_on:
+      mysql1:
+        condition: service_healthy
+      mysql2:
+        condition: service_healthy
+    networks:
+      ndb-net:
+        ipv4_address: 172.20.0.10
+    restart: unless-stopped
+    
+
+# Network Configuration
+networks:
+  ndb-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
